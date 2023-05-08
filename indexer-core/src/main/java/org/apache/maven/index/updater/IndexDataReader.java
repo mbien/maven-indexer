@@ -154,7 +154,7 @@ public class IndexDataReader {
         ArrayBlockingQueue<Document> queue = new ArrayBlockingQueue<>(10000);
 
         ExecutorService executorService = Executors.newFixedThreadPool(threads);
-        ArrayList<Exception> errors = new ArrayList<>();
+        ArrayList<Throwable> errors = new ArrayList<>();
         ArrayList<FSDirectory> siloDirectories = new ArrayList<>(threads);
         ArrayList<IndexWriter> siloWriters = new ArrayList<>(threads);
         LOGGER.debug("Creating {} silo writer threads...", threads);
@@ -173,7 +173,7 @@ public class IndexDataReader {
                                 break;
                             }
                             addToIndex(doc, context, siloWriters.get(silo), rootGroups, allGroups);
-                        } catch (InterruptedException | IOException e) {
+                        } catch (Throwable e) {
                             errors.add(e);
                             break;
                         }
@@ -204,9 +204,15 @@ public class IndexDataReader {
         }
 
         if (!errors.isEmpty()) {
-            IOException exception = new IOException("Error during load of index");
-            errors.forEach(exception::addSuppressed);
-            throw exception;
+            if (errors.stream().allMatch(ex -> ex instanceof IOException || ex instanceof InterruptedException)) {
+                IOException exception = new IOException("Error during load of index");
+                errors.forEach(exception::addSuppressed);
+                throw exception;
+            } else {
+                RuntimeException exception = new RuntimeException("Error during load of index");
+                errors.forEach(exception::addSuppressed);
+                throw exception;
+            }
         }
 
         LOGGER.debug("Silos loaded...");
